@@ -29,6 +29,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     var gy:Float = 0f
     var gz:Float = 0f
 
+    var sensorTA: Sensor? = null
+    var sensorTGY: Sensor? = null
+    var sensorTMF: Sensor? = null
+    var sensorTGR: Sensor? = null
+    var sensorTLA: Sensor? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mv = MovementView(this)
@@ -38,9 +44,35 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        sensorTA = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        sensorTGY = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        sensorTMF = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        sensorTGR = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+        sensorTLA = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+
         sensorManager.registerListener(
             this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+            sensorTA,
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        sensorManager.registerListener(
+            this,
+            sensorTGY,
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        sensorManager.registerListener(
+            this,
+            sensorTMF,
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        sensorManager.registerListener(
+            this,
+            sensorTGR,
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        sensorManager.registerListener(
+            this,
+            sensorTLA,
             SensorManager.SENSOR_DELAY_NORMAL
         )
     }
@@ -54,16 +86,22 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        var ev = event!!.values
+        var evt = event!!.sensor
+        var sn = evt.name
+        var st = evt.type
+        var ev = event.values
         gx = ev[0]
         gy = ev[1]
         gz = ev[2]
         mv?.gx = gx
         mv?.gy = gy
         mv?.gz = gz
+        mv?.sn = sn
+        mv?.st = st
     }
-
 }
+
+// ........................................................................
 
 class UpdateThread(mv: MovementView) : Thread() {
     private var time: Long = 0
@@ -114,12 +152,20 @@ class UpdateThread(mv: MovementView) : Thread() {
 
 class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
 
-    private var xPos: Float = 0.0f
+    var xPos: Float = 0.0f
     var yPos: Float = 0.0f
 
     var gx: Float = 0f
     var gy: Float = 0f
     var gz: Float = 0f
+    var sn: String = ""
+    var st: Int = 0
+
+    var ogx: Float = 0f
+    var ogy: Float = 0f
+    var ogz: Float = 0f
+    var osn: String = ""
+    var ost: Int = 0
 
     var xVel: Int = 2
     var yVel: Int = 2
@@ -137,7 +183,7 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         xPos = event!!.x
-        yPos = event!!.y
+        yPos = event.y
         when(event.action) {
             MotionEvent.ACTION_DOWN -> {}
             MotionEvent.ACTION_MOVE -> {}
@@ -147,7 +193,7 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
         return super.onTouchEvent(event)
     }
 
-    override open fun surfaceCreated(holder: SurfaceHolder)
+    override fun surfaceCreated(holder: SurfaceHolder)
     {
         val surfaceFrame = holder.getSurfaceFrame()
         cwidth = surfaceFrame.width()
@@ -189,16 +235,87 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
         val brush1 = Paint ()
         brush1.setARGB (155, 155, 0, 0)
         brush1.setTextSize (16f)
-        brush1.setTypeface (Typeface.SERIF)
-
+        brush1.setTypeface (Typeface.SANS_SERIF)
         canvas?.drawColor(Color.WHITE)
         canvas?.drawCircle(xPos, yPos, circleRadius, circlePaint)
         var sx = "%.2f".format(gx)
-        var sy = "%.2f".format(gx)
-        var sz = "%.2f".format(gx)
-        canvas?.drawText(sx, 10f, 20f, brush1)
-        canvas?.drawText(sy, 10f, 40f, brush1)
-        canvas?.drawText(sz, 10f, 60f, brush1)
+        var sy = "%.2f".format(gy)
+        var sz = "%.2f".format(gz)
+
+        var sname = ""
+        var sty = 0f
+
+        when(st) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                    sname = "accelerometer"
+                sty = 0f
+            }
+            Sensor.TYPE_GRAVITY -> {
+                sname = "gravity"
+                sty = 1f
+            }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                sname = "magnetic"
+                sty = 2f
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                sname = "gyroscope"
+                sty = 3f
+            }
+            Sensor.TYPE_LINEAR_ACCELERATION -> {
+                sname = "linear accelerometer"
+                sty = 4f
+            }
+        }
+
+        var snst = "%d Name %s - %s".format(st, sn, sname)
+        var x = 10f
+
+        canvas?.drawText(sx,  x, 20f + sty * 100, brush1)
+        canvas?.drawText(sy,  x, 40f + sty * 100, brush1)
+        canvas?.drawText(sz,  x, 60f + sty * 100, brush1)
+        canvas?.drawText(snst,x, 80f + sty * 100, brush1)
+
+        if (st != ost) {
+            when(ost) {
+                Sensor.TYPE_ACCELEROMETER -> {
+                    sname = "accelerometer"
+                    sty = 0f
+                }
+                Sensor.TYPE_GRAVITY -> {
+                    sname = "gravity"
+                    sty = 1f
+                }
+                Sensor.TYPE_MAGNETIC_FIELD -> {
+                    sname = "magnetic"
+                    sty = 2f
+                }
+                Sensor.TYPE_GYROSCOPE -> {
+                    sname = "gyroscope"
+                    sty = 3f
+                }
+                Sensor.TYPE_LINEAR_ACCELERATION -> {
+                    sname = "linear accelerometer"
+                    sty = 4f
+                }
+            }
+            var osx = "%.2f".format(ogx)
+            var osy = "%.2f".format(ogy)
+            var osz = "%.2f".format(ogz)
+
+            var snst = "%d Name %s - %s".format(ost, osn, sname)
+            var x = 10f
+
+            canvas?.drawText(osx,  x, 20f + sty * 100, brush1)
+            canvas?.drawText(osy,  x, 40f + sty * 100, brush1)
+            canvas?.drawText(osz,  x, 60f + sty * 100, brush1)
+            canvas?.drawText(snst, x, 80f + sty * 100, brush1)
+            ogx = gx
+            ogy = gy
+            ogz = gz
+            osn = sn
+            ost = st
+        }
     }
 
     fun updatePhysics() {
