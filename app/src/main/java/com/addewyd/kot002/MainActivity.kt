@@ -20,8 +20,6 @@ import android.widget.TextView
 import android.graphics.Typeface
 import android.widget.LinearLayout
 
-
-
 class MainActivity : AppCompatActivity(), SensorEventListener {
     val sensorManager: SensorManager by lazy {
         getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -32,6 +30,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     var gx:Float = 0f
     var gy:Float = 0f
     var gz:Float = 0f
+
+    var gxm:Float = 0f
+    var gym:Float = 0f
+    var gzm:Float = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,10 +52,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         linLayout.addView(tv)
 
         mv = MovementView(this)
-        mv?.init()
         linLayout.addView(mv)
-
-        //setContentView(mv)
     }
 
     override fun onResume() {
@@ -62,6 +61,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         sensorManager.registerListener(
             this,
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        sensorManager.registerListener(
+            this,
+            sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD),
             SensorManager.SENSOR_DELAY_NORMAL
         )
     }
@@ -77,16 +81,34 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         var evt = event!!.sensor
         var sn = evt.name
-        var st = evt.type
         var ev = event.values
-        gx = ev[0]
-        gy = ev[1]
-        gz = ev[2]
+        var st = evt.type
+        mv?.st = st
+
+        when (st) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                gx = ev[0]
+                gy = ev[1]
+                gz = ev[2]
+            }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                gxm = ev[0]
+                gym = ev[1]
+                gzm = ev[2]
+
+            }
+            else -> {
+
+            }
+        }
+
+        tv?.text = "Accelerometer  %s x %.2f y %.2fz z %.2f\nMagnetic field  x %.2f y %.2fz z %.2f\n".
+            format(sn, gx, gy, gz, gxm, gym, gzm)
+
         mv?.gx = gx
         mv?.gy = gy
         mv?.gz = gz
 
-        tv?.text = "Accelerometer %s type %d\nx %.2f\ny %.2f\nz %.2f".format(sn, st,  gx, gy, gz)
     }
 }
 
@@ -96,13 +118,10 @@ class UpdateThread(mv: MovementView) : Thread() {
     private var time: Long = 0
     private val fps = 20
     private var toRun = false
-    private val movementView: MovementView // ? = null
+    private val movementView: MovementView
     private var surfaceHolder: SurfaceHolder
     var c: Canvas? = null
 
-    //constructor(rMovementView: MovementView) : this() {
-    //this.movementView = rMovementView
-    //}
     init {
         movementView = mv
         surfaceHolder = movementView.getHolder()
@@ -124,12 +143,10 @@ class UpdateThread(mv: MovementView) : Thread() {
                     movementView.updatePhysics();
                     movementView.onDraw(c);
                 }
-                // catch(e: Exception) {}
                 finally {
                     if(c != null) {
                         surfaceHolder.unlockCanvasAndPost(c)
                     }
-
                 }
             }
             time = cTime
@@ -147,6 +164,7 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
     var gx: Float = 0f
     var gy: Float = 0f
     var gz: Float = 0f
+    var st:Int = 0
 
     var xVel: Float = 0f
     var yVel: Float = 0f
@@ -154,13 +172,16 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
     var cwidth: Int = 0
     var cheight: Int = 0
 
-    var circleRadius: Float = 3f
+    var circleRadius: Float = 13f
     val circlePaint: Paint
 
     init {
         this.circlePaint = Paint() // circlePaint
+        getHolder().addCallback(this)
+        circlePaint.setColor(Color.BLUE)
     }
-    lateinit var updateThread: UpdateThread
+
+    val updateThread = UpdateThread(this)
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         when(event?.action) {
@@ -184,15 +205,9 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
         xPos = cwidth / 2.0f
         yPos = circleRadius + 30
 
-        updateThread = UpdateThread(this)
+        //updateThread = UpdateThread(this)
         updateThread.setRunning(true)
         updateThread.start()
-    }
-    public fun init()
-    {
-        getHolder().addCallback(this)
-        circleRadius = 10f
-        circlePaint.setColor(Color.BLUE)
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, p1:Int, p2: Int, height: Int)
@@ -223,32 +238,38 @@ class MovementView(var ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback 
     }
 
     fun updatePhysics() {
-        var fact: Float = 50f;
-
+        val fact: Float = 20f;
+        val r = 0.5f
         xPos += xVel
         yPos += yVel
 
-        if (yPos - circleRadius < 0 || yPos + circleRadius > cheight) {
-            if (yPos - circleRadius < 0) {
-                yPos = circleRadius
-            } else {
-                yPos = cheight - circleRadius
-            }
-            yVel = 0f
-        } else {
-            yVel += gy / fact
-        }
-        if (xPos - circleRadius < 0 || xPos + circleRadius > cwidth) {
-            if (xPos - circleRadius < 0) {
-                xPos = circleRadius
-            } else {
-                xPos = cwidth - circleRadius
-            }
-            xVel = 0f
+        when(st) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                if (yPos - circleRadius < 0 || yPos + circleRadius > cheight) {
+                    if (yPos - circleRadius < 0) {
+                        yPos = circleRadius
+                    } else {
+                        yPos = cheight - circleRadius
+                    }
+                    yVel = -yVel * r
+                } else {
+                    yVel += gy / fact
+                }
+                if (xPos - circleRadius < 0 || xPos + circleRadius > cwidth) {
+                    if (xPos - circleRadius < 0) {
+                        xPos = circleRadius
+                    } else {
+                        xPos = cwidth - circleRadius
+                    }
+                    xVel = -xVel * r
 
-        }
-        else {
-            xVel -= gx / fact
+                } else {
+                    xVel -= gx / fact
+                }
+            }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+
+            }
         }
     }
 }
